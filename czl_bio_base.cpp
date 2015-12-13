@@ -1,4 +1,4 @@
-#include "czl_bio_base.h"
+#include "czl_bio_base.hpp"
 
 namespace czl_bio {
 
@@ -29,37 +29,45 @@ char bit2_to_nt1(uint8_t bit2)
 	case 0x1: return 'T';
 	case 0x2: return 'G';
 	case 0x3: return 'C';
+	default: return 'N';
 	}
+	return 'N';
 }
 
 string nt1_to_nt4(char nt1)
 {
     if (NT1_TO_NT4.find(nt1)!=NT1_TO_NT4.end()) return NT1_TO_NT4[nt1];
+	else return "";
 }
 
 uint8_t nt1_to_byte(char nt1)
 {
     if (NT1_TO_BYTE.find(nt1)!=NT1_TO_BYTE.end()) return NT1_TO_BYTE[nt1];
+	else return 0xf;
 }
 
 uint8_t nt1_to_bit4(char nt1)
 {
     if (NT1_TO_BYTE.find(nt1)!=NT1_TO_BYTE.end()) return NT1_TO_BYTE[nt1]&0xf;
+	else return 0xf;
 }
 
 char nt4_to_nt1(const string & nt4)
 {
     if (NT4_TO_NT1.find(nt4)!=NT4_TO_NT1.end()) return NT4_TO_NT1[nt4];
+	else return 'N';
 }
 
 uint8_t nt4_to_byte(const string & nt4)
 {
     if (NT4_TO_NT1.find(nt4)!=NT4_TO_NT1.end()) return NT1_TO_BYTE[NT4_TO_NT1[nt4]];
+	else return 0xf;
 }
 
 char complement_nt1(char nt1)
 {
     if (NT1_TO_COMPL.find(nt1)!=NT1_TO_COMPL.end()) return NT1_TO_COMPL[nt1];
+	else return 'N';
 }
 
 uint8_t complement_byte(uint8_t byte)
@@ -67,19 +75,20 @@ uint8_t complement_byte(uint8_t byte)
     return BYTE_TO_COMPL[byte];
 }
 
-int complement_copy(const string & seq, string & out_seq)
+int complement_nt1_copy(const string & seq, string & out_seq)
 {
+	out_seq.resize(seq.size());
     for (int i=0; i<seq.size(); i++) {
         if (NT1_TO_COMPL.find(seq[i])==NT1_TO_COMPL.end()) {
-            out_seq.push_back('N');
+            out_seq[i] = 'N';
         } else {
-            out_seq.push_back(NT1_TO_COMPL[seq[i]]);
+            out_seq[i] = NT1_TO_COMPL[seq[i]];
         }
     }
     return 0;
 }
 
-int complement(string & seq)
+int complement_nt1(string & seq)
 {
     for (int i=0; i<seq.size(); i++) {
         if (NT1_TO_COMPL.find(seq[i])==NT1_TO_COMPL.end()) {
@@ -91,20 +100,21 @@ int complement(string & seq)
     return 0;
 }
 
-int rev_complement_copy(const string & seq, string & out_seq)
+int rev_complement_nt1_copy(const string & seq, string & out_seq)
 {
+	out_seq.resize(seq.size());
     for (int i=0; i<seq.size(); i++) {
         if (NT1_TO_COMPL.find(seq[i])==NT1_TO_COMPL.end()) {
-            out_seq.push_back('N');
+            out_seq[i] = 'N';
         } else {
-            out_seq.push_back(NT1_TO_COMPL[seq[i]]);
+            out_seq[i] = NT1_TO_COMPL[seq[i]];
         }
     }
     reverse(out_seq.begin(),out_seq.end());
     return 0;
 }
 
-int rev_complement(string & seq)
+int rev_complement_nt1(string & seq)
 {
 	size_t n = seq.size();
     for (int i=0; i<n/2; i++) {
@@ -189,7 +199,9 @@ char codon_to_aa1(const string & codon, map<string,char> & codon_table)
 
 int translate(const string & codon, string & prot, map<string,char> & codon_table)
 {
-    for (int i=0; i<codon.size()-2; i+=3) {
+	int k=0;
+	prot.resize(codon.size()/3);
+    for (int i=0; i<codon.size()-2; i+=3, k++) {
         uint8_t is_mask=0;
         string s = codon.substr(i, 3);
         for (int j=0; j<3; j++) {
@@ -198,7 +210,7 @@ int translate(const string & codon, string & prot, map<string,char> & codon_tabl
         }
         if (codon_table.find(s)!=codon_table.end()) {
             char a = (codon_table[s] | is_mask);
-            prot.push_back(a);
+            prot[k] = a;
         }
     }
     return 0;

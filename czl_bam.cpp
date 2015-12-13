@@ -1,9 +1,12 @@
-#include "czl_bam.h"
+#include "czl_bam.hpp"
+#include <cstdio>
+
+namespace czl_bio {
 
 /// class Bam
 // {{{
-/*
- *
+/**
+ * @brief split bam file by sliding windows, need to test
  */
 int Bam::split_by_chr_pos(string & bam_file, int is_sorted_by_coord, string & out_prefix, int length, int step, string * out_bed_file)
 {
@@ -90,11 +93,12 @@ int Bam::split_by_chr_pos(string & bam_file, int is_sorted_by_coord, string & ou
                         fout_bed << id << "\t" << begin << "\t" << end << "\n";
                     }
 
-					BOOST_FOREACH( bam1_t *bam1, bams) {
-						if (bam1->core.pos<end) {
-							bam_write1(fp, bams.front());
-						}
-					}
+                    for (list<bam1_t*>::iterator it=bams.begin(); it!=bams.end(); it++) {
+                        bam1_t * bam1 = *it;
+                        if (bam1->core.pos<end) {
+                            bam_write1(fp, bam1);
+                        }
+                    }
                     while ( !bams.empty() && bams.front()->core.pos < begin+step ) {
                         bam_destroy1(bams.front());
                         bams.pop_front();
@@ -113,7 +117,7 @@ int Bam::split_by_chr_pos(string & bam_file, int is_sorted_by_coord, string & ou
                 bam_destroy1(bams.front());
                 bams.pop_front();
             }
-			bam_close(fp);
+            bam_close(fp);
             while ( !bams.empty() ) {
                 bam_destroy1(bams.front());
                 bams.pop_front();
@@ -149,27 +153,29 @@ int Bam::split_by_chr(string & bam_file, string & out_prefix, vector<string> * o
 
     string file = out_prefix+"unmap.bam";
     string dir;
+    stringstream ss;
     bamFile unmap_fp = bam_open(file.c_str(), "wb");
     bam_header_write(unmap_fp, bam_header_p);
 
     const int32_t nt = bam_header_p->n_targets;
     const int32_t n=100000;
     int32_t m=0, m1=0;
-    vector<bam1_t*> bam1s[nt];
+    vector< vector<bam1_t*> > bam1s(nt);
     vector<int32_t> tids;
     int64_t bam1_nums[nt];
     for (int32_t i=0; i<nt; i++) { bam1_nums[i] = 0; }
-    string bam_files[nt];
+    vector<string> bam_files(nt);
     for (int32_t i=0; i<nt; i++) {
         bam_files[i] = out_prefix+bam_header_p->target_name[i];
         if (out_chroms!=NULL) {
             out_chroms->push_back(bam_header_p->target_name[i]);
         }
-        dir = out_prefix+"tmp_"+boost::lexical_cast<string>(i);
-        boost::filesystem::path p(dir);
-        if (!boost::filesystem::exists(p)) {
-            boost::filesystem::create_directory(p);
-            if (!boost::filesystem::exists(p)) {
+        ss.str("");
+        ss << out_prefix << "tmp_" << i;
+        dir = ss.str();
+        if (!File::exists_dir(dir)) {
+            File::create_dir(dir);
+            if (!File::exists_dir(dir)) {
                 cerr << "Can't create DIR " << dir;
                 return 1;
             }
@@ -193,10 +199,13 @@ int Bam::split_by_chr(string & bam_file, string & out_prefix, vector<string> * o
             if ( m == n) {
                 for (int32_t j=0; j<tids.size(); j++) {
                     tid = tids[j];
-                    file = out_prefix+"tmp_"+boost::lexical_cast<string>(tid)+"/"+boost::lexical_cast<string>(bam1_nums[tid]++);
+                    ss.str("");
+                    ss << out_prefix << "tmp_" << tid << "/" << bam1_nums[tid]++;
+                    file = ss.str();
                     bamFile fp = bam_open(file.c_str(), "wb");
                 //  bam_header_write(fp, bam_header_p);
-                    BOOST_FOREACH(bam1, bam1s[tid]) {
+                    for (int i=0; i<bam1s[tid].size(); i++) {
+                        bam1_t * bam1 = bam1s[tid][i];
                         bam_write1(fp, bam1);
                         bam_destroy1(bam1);
                     }
@@ -230,10 +239,13 @@ int Bam::split_by_chr(string & bam_file, string & out_prefix, vector<string> * o
 
     for (int32_t j=0; j<tids.size(); j++) {
         int32_t tid = tids[j];
-        file = out_prefix+"tmp_"+boost::lexical_cast<string>(tid)+"/"+boost::lexical_cast<string>(bam1_nums[tid]++);
+        ss.str("");
+        ss << out_prefix << "tmp_" << tid << "/" << bam1_nums[tid]++;
+        file = ss.str();
         bamFile fp = bam_open(file.c_str(), "wb");
     //  bam_header_write(fp, bam_header_p);
-        BOOST_FOREACH(bam1, bam1s[tid]) {
+        for (int i=0; i<bam1s[tid].size(); i++) {
+            bam1_t * bam1 = bam1s[tid][i];
             bam_write1(fp, bam1);
             bam_destroy1(bam1);
         }
@@ -264,7 +276,9 @@ int Bam::split_by_chr(string & bam_file, string & out_prefix, vector<string> * o
             bamFile fpw = bam_open(bam_files[tid].c_str(), "wb");
             bam_header_write(fpw, bam_header_p);
             for (int64_t i=0; i<bam1_nums[tid]; i++) {
-                file = out_prefix+"tmp_"+boost::lexical_cast<string>(tid)+"/"+boost::lexical_cast<string>(i);
+                ss.str("");
+                ss << out_prefix << "tmp_" << tid << "/" << i;
+                file = ss.str();
                 bamFile fpr = bam_open(file.c_str(), "rb");
                 m=0;
                 while ( bam_read1(fpr, bam1)>0 ) {
@@ -273,15 +287,15 @@ int Bam::split_by_chr(string & bam_file, string & out_prefix, vector<string> * o
                     m++;
                 }
                 bam_close(fpr);
-                boost::filesystem::path p(file);
-                boost::filesystem::remove(p);
+                remove(file.c_str());
             }
             bam_close(fpw);
             bam1_nums[tid]=0;
         }
-        dir = out_prefix+"tmp_"+boost::lexical_cast<string>(tid)+"/";
-        boost::filesystem::path p(dir);
-        boost::filesystem::remove(p);
+        ss.str("");
+        ss << out_prefix << "tmp_" << tid << "/";
+        dir = ss.str();
+        remove(dir.c_str());
     }
     bam_destroy1(bam1);
 
@@ -379,7 +393,7 @@ int Bam::sort_by_name(const char *bam_file, const char *out_bam_file, const char
         bam_close(bam_fps[0]);
 
         if ( read_num <= buf_n ) {
-            boost::filesystem::remove(null_s);
+            remove(null_s.c_str());
 
             sort_by_name(bams.begin(), bams.begin()+read_num, k0);
             bamFile fpw = bam_open(out_bam_file, "wb");
@@ -409,7 +423,7 @@ int Bam::sort_by_name(const char *bam_file, const char *out_bam_file, const char
                 count[c]++;
             }
             if (nnz==0) {
-                boost::filesystem::remove(null_s);
+                remove(null_s.c_str());
 
                 fp = bam_open(bam_file, "rb");
                 bam_header_destroy(bam_header_read(fp));
@@ -424,16 +438,16 @@ int Bam::sort_by_name(const char *bam_file, const char *out_bam_file, const char
                 bam_close(fp);
                 return 0;
             } else if (nnz==1 && count[0]==0) {
-                boost::filesystem::remove(null_s);
+                remove(null_s.c_str());
                 name.push_back(c);
                 file = tmp_dir_s+name;
-                boost::filesystem::remove(file);
+                remove(file.c_str());
                 k0++;
             } else {
                 stack[0]->name = name;
                 stack[0]->k = k0;
                 file = tmp_dir_s+name;
-                boost::filesystem::rename(null_s, file);
+                rename(null_s.c_str(), file.c_str());
                 int j=0;
                 for (int16_t c=1; c<K; c++) {
                     if (count[c]>0) {
@@ -462,7 +476,7 @@ int Bam::sort_by_name(const char *bam_file, const char *out_bam_file, const char
             // merge to parent, set parent finished, pop all child
                 int pn = a0->parent;
                 file = tmp_dir_s+stack[pn]->name;
-                boost::filesystem::rename(file, null_s);
+                rename(file.c_str(), null_s.c_str());
                 bamFile fpw = bam_open(file.c_str(), "wb");
                 bam_header_write(fpw, bam_header_p);
                 /// write 'null_s'
@@ -475,7 +489,7 @@ int Bam::sort_by_name(const char *bam_file, const char *out_bam_file, const char
                     }
                     bam_destroy1(bam);
                     bam_close(fp);
-                    boost::filesystem::remove(null_s);
+                    remove(null_s.c_str());
                 }
                 for (int j=n; j<stack.size(); j++) {
                     file = tmp_dir_s + stack[j]->name;
@@ -487,7 +501,7 @@ int Bam::sort_by_name(const char *bam_file, const char *out_bam_file, const char
                     }
                     bam_destroy1(bam);
                     bam_close(fp);
-                    boost::filesystem::remove(file);
+                    remove(file.c_str());
                 }
                 bam_close(fpw);
                 stack[pn]->flag |= 0x01; // set finished
@@ -557,24 +571,24 @@ int Bam::sort_by_name(const char *bam_file, const char *out_bam_file, const char
                     bam_close(fp);
                     bam_close(bam_fps[0]);
                     if (nnz==0) {
-                        boost::filesystem::remove(null_s);
+                        remove(null_s.c_str());
 
                         a0->flag |= 0x01;
                         break;
                     } else if (nnz==1 && count[0]==0) {
                         bam_close(bam_fps[c]);
-                        boost::filesystem::remove(null_s);
+                        remove(null_s.c_str());
                         name.push_back(c);
                         file = tmp_dir_s+name;
-                        boost::filesystem::remove(file);
+                        remove(file.c_str());
                         a0->k++;
                     } else {
                         file = tmp_dir_s+a0->name;
-                        boost::filesystem::remove(file);
+                        remove(file.c_str());
 
                         a0->name = name;
                         file = tmp_dir_s + name;
-                        boost::filesystem::rename(null_s, file);
+                        rename(null_s.c_str(), file.c_str());
                         int j=0;
                         int np = n;
                         for (int16_t c=1; c<K; c++) {
@@ -600,7 +614,7 @@ int Bam::sort_by_name(const char *bam_file, const char *out_bam_file, const char
     }
     string out_bam_s(out_bam_file);
     file = tmp_dir_s + stack[0]->name;
-    boost::filesystem::rename(file, out_bam_s);
+    rename(file.c_str(), out_bam_s.c_str());
     delete stack[0];
 
     return 0;
@@ -832,9 +846,9 @@ int bam_to_fastq(const string & bam_file, const string fastq_files[3])
     vector<bam1_t*> bam1s[2], se_bam1s;
     bam1_t *bam1, *prev_bam1=NULL;
     bam1 = bam_init1();
-	int r1=0, r=0;
+    int r1=0, r=0;
     while ( r == 0 ) {
-		r1 = bam_read1(bam_fp, bam1);
+        r1 = bam_read1(bam_fp, bam1);
         if (prev_bam1==NULL) {
         } else if ( r1>0 && strcmp(bam1_qname(prev_bam1), bam1_qname(bam1))==0 ) {
         } else { // not the same qname
@@ -844,7 +858,7 @@ int bam_to_fastq(const string & bam_file, const string fastq_files[3])
                 int i1=0;
                 int32_t l_qseq=0;
                 for (int j=0; j<se_bam1s.size(); j++) {
-					if (se_bam1s[j]->core.l_qseq > l_qseq) { i1=j; l_qseq = se_bam1s[i1]->core.l_qseq; }
+                    if (se_bam1s[j]->core.l_qseq > l_qseq) { i1=j; l_qseq = se_bam1s[i1]->core.l_qseq; }
                 }
                 char *qname = bam1_qname(se_bam1s[i1]);
                 uint8_t *qual0 = bam1_qual(se_bam1s[i1]);
@@ -861,7 +875,7 @@ int bam_to_fastq(const string & bam_file, const string fastq_files[3])
                             case 0x2: a=0x04; break;
                             case 0x4: a=0x02; break;
                             case 0x8: a=0x01; break;
-							default: break;
+                            default: break;
                         }
                         j1--;
                         qseq[j1] = bam_nt16_rev_table[a];
@@ -881,7 +895,8 @@ int bam_to_fastq(const string & bam_file, const string fastq_files[3])
                 fastq_fs[0] << qseq << "\n" << "+" << "\n" << qual33 << "\n";
                 delete qseq;
                 delete qual33;
-                BOOST_FOREACH (bam1_t* b, se_bam1s) {
+                for (int i=0; i<se_bam1s.size(); i++) {
+                    bam1_t *b = se_bam1s[i];
                     bam_destroy1(b);
                 }
                 se_bam1s.clear();
@@ -890,80 +905,81 @@ int bam_to_fastq(const string & bam_file, const string fastq_files[3])
             int k[2];
             n0 = bam1s[0].size();
             n1 = bam1s[1].size();
-			if ( n0>0 || n1>0 ) {
-				if (n0>0 && n1==0) {
-					k[0]=0;
-				} else if (n1>0 && n0==0) {
-					k[1]=0;
-				} else if (n0>0 && n1>0) {
-					k[0]=1; k[1]=2;
-				}
+            if ( n0>0 || n1>0 ) {
+                if (n0>0 && n1==0) {
+                    k[0]=0;
+                } else if (n1>0 && n0==0) {
+                    k[1]=0;
+                } else if (n0>0 && n1>0) {
+                    k[0]=1; k[1]=2;
+                }
 
-				for (int i=0; i<2; i++) {
-					if (bam1s[i].size()==0) continue;
-					int i1=0;
-					int32_t l_qseq=0;
-					for (int j=0; j<bam1s[i].size(); j++) {
-						if (bam1s[i][j]->core.l_qseq > l_qseq) { i1=j; l_qseq = bam1s[i][i1]->core.l_qseq; }
-					}
-					char *qname = bam1_qname(bam1s[i][i1]);
-					uint8_t *qual0 = bam1_qual(bam1s[i][i1]);
-					char *qseq = new char[l_qseq+1];
-					char* qual33 = new char[l_qseq+1];
-					if ( bam1_strand(bam1s[i][i1]) ) { // reverse
-						int32_t j1=l_qseq;
-						qseq[j1]=0;
-						qual33[j1]=0;
-						for (int32_t j=0; j<l_qseq; j++) {
-							int8_t a = bam1_seqi(bam1_seq(bam1s[i][i1]), j);
-							switch(a) {
-								case 0x1: a=0x08; break;
-								case 0x2: a=0x04; break;
-								case 0x4: a=0x02; break;
-								case 0x8: a=0x01; break;
-								default: break;
-							}
-							j1--;
-							qseq[j1] = bam_nt16_rev_table[a];
-							qual33[j1] = qual0[j]+33;
-						}
-					} else {
-						int32_t j;
-						for (j=0; j<l_qseq; j++) {
-							int8_t a = bam1_seqi(bam1_seq(bam1s[i][i1]), j);
-							qseq[j] = bam_nt16_rev_table[a];
-							qual33[j] = qual0[j]+33;
-						}
-						qseq[j]=0;
-						qual33[j]=0;
-					}
-					fastq_fs[k[i]] << "@" << qname << "\n";
-					fastq_fs[k[i]] << qseq << "\n" << "+" << "\n" << qual33 << "\n";
-					delete qseq;
-					delete qual33;
-					BOOST_FOREACH (bam1_t* b, bam1s[i]) {
-						bam_destroy1(b);
-					}
-					bam1s[i].clear();
-				}
-			}
+                for (int i=0; i<2; i++) {
+                    if (bam1s[i].size()==0) continue;
+                    int i1=0;
+                    int32_t l_qseq=0;
+                    for (int j=0; j<bam1s[i].size(); j++) {
+                        if (bam1s[i][j]->core.l_qseq > l_qseq) { i1=j; l_qseq = bam1s[i][i1]->core.l_qseq; }
+                    }
+                    char *qname = bam1_qname(bam1s[i][i1]);
+                    uint8_t *qual0 = bam1_qual(bam1s[i][i1]);
+                    char *qseq = new char[l_qseq+1];
+                    char* qual33 = new char[l_qseq+1];
+                    if ( bam1_strand(bam1s[i][i1]) ) { // reverse
+                        int32_t j1=l_qseq;
+                        qseq[j1]=0;
+                        qual33[j1]=0;
+                        for (int32_t j=0; j<l_qseq; j++) {
+                            int8_t a = bam1_seqi(bam1_seq(bam1s[i][i1]), j);
+                            switch(a) {
+                                case 0x1: a=0x08; break;
+                                case 0x2: a=0x04; break;
+                                case 0x4: a=0x02; break;
+                                case 0x8: a=0x01; break;
+                                default: break;
+                            }
+                            j1--;
+                            qseq[j1] = bam_nt16_rev_table[a];
+                            qual33[j1] = qual0[j]+33;
+                        }
+                    } else {
+                        int32_t j;
+                        for (j=0; j<l_qseq; j++) {
+                            int8_t a = bam1_seqi(bam1_seq(bam1s[i][i1]), j);
+                            qseq[j] = bam_nt16_rev_table[a];
+                            qual33[j] = qual0[j]+33;
+                        }
+                        qseq[j]=0;
+                        qual33[j]=0;
+                    }
+                    fastq_fs[k[i]] << "@" << qname << "\n";
+                    fastq_fs[k[i]] << qseq << "\n" << "+" << "\n" << qual33 << "\n";
+                    delete qseq;
+                    delete qual33;
+                    for (int j=0; j<bam1s[i].size(); j++) {
+                        bam1_t* b = bam1s[i][j];
+                        bam_destroy1(b);
+                    }
+                    bam1s[i].clear();
+                }
+            }
         }
-		if ( r1>0 ) {
-			if ( (bam1->core.flag & BAM_FPAIRED) == 0) {
-				se_bam1s.push_back(bam1);
-			} else {
-				if ( (bam1->core.flag & BAM_FREAD1) !=0 ) {
-					bam1s[0].push_back(bam1);
-				} else if ( (bam1->core.flag & BAM_FREAD2) !=0 ) {
-					bam1s[1].push_back(bam1);
-				} else {
-				}
-			}
-			prev_bam1 = bam1;
-			bam1 = bam_init1();
-		} else {
-			r = 1;
-		}
+        if ( r1>0 ) {
+            if ( (bam1->core.flag & BAM_FPAIRED) == 0) {
+                se_bam1s.push_back(bam1);
+            } else {
+                if ( (bam1->core.flag & BAM_FREAD1) !=0 ) {
+                    bam1s[0].push_back(bam1);
+                } else if ( (bam1->core.flag & BAM_FREAD2) !=0 ) {
+                    bam1s[1].push_back(bam1);
+                } else {
+                }
+            }
+            prev_bam1 = bam1;
+            bam1 = bam_init1();
+        } else {
+            r = 1;
+        }
     }
     bam_destroy1(bam1);
 
@@ -976,8 +992,8 @@ int bam_to_fastq(const string & bam_file, const string fastq_files[3])
 // }}}
 
 /**
-  * converte bam to fasta and qual (p1, p2, s)
-  */
+ * converte bam to fasta and qual (p1, p2, s)
+ */
 int bam_to_fasta_qual(const string & bam_file, const string fasta_files[3], const string qual_files[3])
 // {{{
 {
@@ -1019,9 +1035,9 @@ int bam_to_fasta_qual(const string & bam_file, const string fasta_files[3], cons
     vector<bam1_t*> bam1s[2], se_bam1s;
     bam1_t *bam1, *prev_bam1=NULL;
     bam1 = bam_init1();
-	int r1=0, r=0;
+    int r1=0, r=0;
     while ( r==0 ) {
-		r1 = bam_read1(bam_fp, bam1);
+        r1 = bam_read1(bam_fp, bam1);
         if (prev_bam1==NULL) {
         } else if ( r1>0 && strcmp(bam1_qname(prev_bam1), bam1_qname(bam1))==0 ) {
         } else { // not the same qname
@@ -1033,7 +1049,7 @@ int bam_to_fasta_qual(const string & bam_file, const string fasta_files[3], cons
                 int32_t l_qseq=0;
                 int32_t l_qname = se_bam1s[0]->core.l_qname;
                 for (int j=0; j<se_bam1s.size(); j++) {
-					if (se_bam1s[j]->core.l_qseq > l_qseq) { i1=j; l_qseq = se_bam1s[i1]->core.l_qseq; }
+                    if (se_bam1s[j]->core.l_qseq > l_qseq) { i1=j; l_qseq = se_bam1s[i1]->core.l_qseq; }
                 }
                 char *qname = bam1_qname(se_bam1s[i1]);
                 uint8_t *qual0 = bam1_qual(se_bam1s[i1]);
@@ -1048,7 +1064,7 @@ int bam_to_fasta_qual(const string & bam_file, const string fasta_files[3], cons
                             case 0x2: a=0x04; break;
                             case 0x4: a=0x02; break;
                             case 0x8: a=0x01; break;
-							default: break;
+                            default: break;
                         }
                         j1--;
                         qseq[j1] = bam_nt16_rev_table[a];
@@ -1111,7 +1127,8 @@ int bam_to_fasta_qual(const string & bam_file, const string fasta_files[3], cons
            //   }
            //   qual_fs[0] << "\n";
                 delete qseq;
-                BOOST_FOREACH (bam1_t* b, se_bam1s) {
+                for (int i=0; i<se_bam1s.size(); i++) {
+                    bam1_t* b = se_bam1s[i];
                     bam_destroy1(b);
                 }
                 se_bam1s.clear();
@@ -1120,135 +1137,136 @@ int bam_to_fasta_qual(const string & bam_file, const string fasta_files[3], cons
             int k[2];
             n0 = bam1s[0].size();
             n1 = bam1s[1].size();
-			if (n0>0 || n1>0) {
-				if (n0>0 && n1==0) {
-					k[0]=0;
-				} else if (n1>0 && n0==0) {
-					k[1]=0;
-				} else if (n0>0 && n1>0) {
-					k[0]=1; k[1]=2;
-				}
+            if (n0>0 || n1>0) {
+                if (n0>0 && n1==0) {
+                    k[0]=0;
+                } else if (n1>0 && n0==0) {
+                    k[1]=0;
+                } else if (n0>0 && n1>0) {
+                    k[0]=1; k[1]=2;
+                }
 
-				for (int i=0; i<2; i++) {
-					if (bam1s[i].size()==0) continue;
-					int l0=0, l=0;
-					int i1=0;
-					int32_t l_qseq=0;
-					int32_t l_qname = bam1s[i][0]->core.l_qname;
-					for (int j=0; j<bam1s[i].size(); j++) {
-						if (bam1s[i][j]->core.l_qseq > l_qseq) { i1=j; l_qseq = bam1s[i][i1]->core.l_qseq; }
-					}
-					char *qname = bam1_qname(bam1s[i][i1]);
-					uint8_t *qual0 = bam1_qual(bam1s[i][i1]);
-					char *qseq = new char[l_qseq+1];
-					if ( bam1_strand(bam1s[i][i1]) ) { // reverse
-						int32_t j1=l_qseq;
-						qseq[j1]=0;
-						for (int32_t j=0; j<l_qseq; j++) {
-							int8_t a = bam1_seqi(bam1_seq(bam1s[i][i1]), j);
-							switch(a) {
-								case 0x1: a=0x08; break;
-								case 0x2: a=0x04; break;
-								case 0x4: a=0x02; break;
-								case 0x8: a=0x01; break;
-								default: break;
-							}
-							j1--;
-							qseq[j1] = bam_nt16_rev_table[a];
-						}
-					} else {
-						int32_t j;
-						for (j=0; j<l_qseq; j++) {
-							int8_t a = bam1_seqi(bam1_seq(bam1s[i][i1]), j);
-							qseq[j] = bam_nt16_rev_table[a];
-						}
-						qseq[j]=0;
-					}
+                for (int i=0; i<2; i++) {
+                    if (bam1s[i].size()==0) continue;
+                    int l0=0, l=0;
+                    int i1=0;
+                    int32_t l_qseq=0;
+                    int32_t l_qname = bam1s[i][0]->core.l_qname;
+                    for (int j=0; j<bam1s[i].size(); j++) {
+                        if (bam1s[i][j]->core.l_qseq > l_qseq) { i1=j; l_qseq = bam1s[i][i1]->core.l_qseq; }
+                    }
+                    char *qname = bam1_qname(bam1s[i][i1]);
+                    uint8_t *qual0 = bam1_qual(bam1s[i][i1]);
+                    char *qseq = new char[l_qseq+1];
+                    if ( bam1_strand(bam1s[i][i1]) ) { // reverse
+                        int32_t j1=l_qseq;
+                        qseq[j1]=0;
+                        for (int32_t j=0; j<l_qseq; j++) {
+                            int8_t a = bam1_seqi(bam1_seq(bam1s[i][i1]), j);
+                            switch(a) {
+                                case 0x1: a=0x08; break;
+                                case 0x2: a=0x04; break;
+                                case 0x4: a=0x02; break;
+                                case 0x8: a=0x01; break;
+                                default: break;
+                            }
+                            j1--;
+                            qseq[j1] = bam_nt16_rev_table[a];
+                        }
+                    } else {
+                        int32_t j;
+                        for (j=0; j<l_qseq; j++) {
+                            int8_t a = bam1_seqi(bam1_seq(bam1s[i][i1]), j);
+                            qseq[j] = bam_nt16_rev_table[a];
+                        }
+                        qseq[j]=0;
+                    }
 
-					int ki = k[i];
-					l0= l_qname+2 + l_qseq+1;
-					l = fasta_buf_ul[ki];
-					if (l + l0 > buf_l) {
-						fasta_fs[ki].write(fasta_buf[ki], l*sizeof(char));
-						fasta_buf_ul[ki] = 0;
-						l = 0;
-					}
-					fasta_buf[ki][l++] = '>';
-					memcpy(fasta_buf[ki]+l, qname, l_qname);
-					l+=l_qname;
-					fasta_buf[ki][l++] = '\n';
-					memcpy(fasta_buf[ki]+l, qseq, l_qseq);
-					l+=l_qseq;
-					fasta_buf[ki][l++] = '\n';
-					fasta_buf_ul[ki] = l;
+                    int ki = k[i];
+                    l0= l_qname+2 + l_qseq+1;
+                    l = fasta_buf_ul[ki];
+                    if (l + l0 > buf_l) {
+                        fasta_fs[ki].write(fasta_buf[ki], l*sizeof(char));
+                        fasta_buf_ul[ki] = 0;
+                        l = 0;
+                    }
+                    fasta_buf[ki][l++] = '>';
+                    memcpy(fasta_buf[ki]+l, qname, l_qname);
+                    l+=l_qname;
+                    fasta_buf[ki][l++] = '\n';
+                    memcpy(fasta_buf[ki]+l, qseq, l_qseq);
+                    l+=l_qseq;
+                    fasta_buf[ki][l++] = '\n';
+                    fasta_buf_ul[ki] = l;
 
-					l0 = l_qname+2 + l_qseq*4;
-					l = qual_buf_ul[ki];
-					if (l + l0 > buf_l) {
-						qual_fs[ki].write(qual_buf[ki], l*sizeof(char));
-						qual_buf_ul[ki] = 0;
-						l = 0;
-					}
-					qual_buf[ki][l++] = '>';
-					memcpy(qual_buf[ki]+l, qname, l_qname);
-					l+=l_qname;
-					qual_buf[ki][l++] = '\n';
-					for (int32_t j=0; j<l_qseq; j++) {
-						if (j>0) qual_buf[ki][l++]=' ';
-						int8_t a = qual0[i], ai=0;
-						char b[3];
-						while (a>=10) {
-							b[ai++] = (a%10)|0x30;
-							a/=10;
-						}
-						b[ai] = a|0x30;
-						while (ai>=0) { qual_buf[ki][l++]=b[ai--]; }
-					//  string s = boost::lexical_cast<string>((int16_t)qual0[j]);
-					//  memcpy(qual_buf[ki]+l, s.c_str(), s.size());
-					//  l+=s.size();
-					}
-					qual_buf[ki][l++] = '\n';
-					qual_buf_ul[ki] = l;
+                    l0 = l_qname+2 + l_qseq*4;
+                    l = qual_buf_ul[ki];
+                    if (l + l0 > buf_l) {
+                        qual_fs[ki].write(qual_buf[ki], l*sizeof(char));
+                        qual_buf_ul[ki] = 0;
+                        l = 0;
+                    }
+                    qual_buf[ki][l++] = '>';
+                    memcpy(qual_buf[ki]+l, qname, l_qname);
+                    l+=l_qname;
+                    qual_buf[ki][l++] = '\n';
+                    for (int32_t j=0; j<l_qseq; j++) {
+                        if (j>0) qual_buf[ki][l++]=' ';
+                        int8_t a = qual0[i], ai=0;
+                        char b[3];
+                        while (a>=10) {
+                            b[ai++] = (a%10)|0x30;
+                            a/=10;
+                        }
+                        b[ai] = a|0x30;
+                        while (ai>=0) { qual_buf[ki][l++]=b[ai--]; }
+                    //  string s = boost::lexical_cast<string>((int16_t)qual0[j]);
+                    //  memcpy(qual_buf[ki]+l, s.c_str(), s.size());
+                    //  l+=s.size();
+                    }
+                    qual_buf[ki][l++] = '\n';
+                    qual_buf_ul[ki] = l;
 
-				//  fasta_fs[k[i]] << ">" << qname << "\n" << qseq << "\n";
-				//  qual_fs[k[i]] << ">" << qname << "\n";
-				//  for (int32_t j=0; j<l_qseq; j++) {
-				//      if (j>0) qual_fs[k[i]] << " ";
-				//      qual_fs[k[i]] << (int16_t)qual0[j];
-				//  }
-				//  qual_fs[k[i]] << "\n";
-					delete qseq;
-					BOOST_FOREACH (bam1_t* b, bam1s[i]) {
-						bam_destroy1(b);
-					}
-					bam1s[i].clear();
-				}
-			}
+                //  fasta_fs[k[i]] << ">" << qname << "\n" << qseq << "\n";
+                //  qual_fs[k[i]] << ">" << qname << "\n";
+                //  for (int32_t j=0; j<l_qseq; j++) {
+                //      if (j>0) qual_fs[k[i]] << " ";
+                //      qual_fs[k[i]] << (int16_t)qual0[j];
+                //  }
+                //  qual_fs[k[i]] << "\n";
+                    delete qseq;
+                    for (int j=0; j<bam1s[i].size(); j++) {
+                        bam1_t* b = bam1s[i][j];
+                        bam_destroy1(b);
+                    }
+                    bam1s[i].clear();
+                }
+            }
         }
-		if (r1>0) {
-			if ( (bam1->core.flag & BAM_FPAIRED) == 0) {
-				se_bam1s.push_back(bam1);
-			} else {
-				if ( (bam1->core.flag & BAM_FREAD1) !=0 ) {
-					bam1s[0].push_back(bam1);
-				} else if ( (bam1->core.flag & BAM_FREAD2) !=0 ) {
-					bam1s[1].push_back(bam1);
-				} else {
-				}
-			}
-			prev_bam1 = bam1;
-			bam1 = bam_init1();
-		} else {
-			r=1;
-		}
+        if (r1>0) {
+            if ( (bam1->core.flag & BAM_FPAIRED) == 0) {
+                se_bam1s.push_back(bam1);
+            } else {
+                if ( (bam1->core.flag & BAM_FREAD1) !=0 ) {
+                    bam1s[0].push_back(bam1);
+                } else if ( (bam1->core.flag & BAM_FREAD2) !=0 ) {
+                    bam1s[1].push_back(bam1);
+                } else {
+                }
+            }
+            prev_bam1 = bam1;
+            bam1 = bam_init1();
+        } else {
+            r=1;
+        }
     }
     bam_destroy1(bam1);
 
     bam_close(bam_fp);
 
     for (int i=0; i<3; i++) {
-		fasta_fs[i].write(fasta_buf[i], fasta_buf_ul[i]*sizeof(char));
-		qual_fs[i].write(qual_buf[i], qual_buf_ul[i]*sizeof(char));
+        fasta_fs[i].write(fasta_buf[i], fasta_buf_ul[i]*sizeof(char));
+        qual_fs[i].write(qual_buf[i], qual_buf_ul[i]*sizeof(char));
         fasta_fs[i].close();
         qual_fs[i].close();
     }
@@ -1256,3 +1274,5 @@ int bam_to_fasta_qual(const string & bam_file, const string fasta_files[3], cons
 }
 // }}}
 
+
+};

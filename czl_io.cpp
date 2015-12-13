@@ -1,4 +1,4 @@
-#include "czl_io.h"
+#include "czl_io.hpp"
 
 using namespace std;
 
@@ -214,7 +214,7 @@ istream & Fasta::get_a_seq(istream & fin, string & id, string & seq)
         if (c=='>') {
             if (si==0) {
                 getline(fin, line);
-                boost::trim(line);
+                StringUtility::trim(line, " \t");
                 id = line;
                 si=1;
             } else {
@@ -227,9 +227,8 @@ istream & Fasta::get_a_seq(istream & fin, string & id, string & seq)
         } else if (!isspace(c)) {
             line.clear();
             getline(fin, line);
-            boost::trim(line);
-            boost::erase_all(line, " ");
-            boost::erase_all(line, "\t");
+            StringUtility::trim(line, " \t");
+            StringUtility::erase_all(line, " \t");
             seq+=c;
             seq+=line;
         }
@@ -276,21 +275,21 @@ int Fasta::split_by_id(string & fasta_file, string & out_dir, vector<string> & o
     while (!fin.eof()) {
         line.clear();
         getline(fin, line);
-        boost::trim(line);
+        StringUtility::trim(line, " \t");
         if (line.empty()) continue;
 
         if (line[0]=='#') {
             continue;
         } else if (line[0]=='>') {
             id = line.substr(1);
-            boost::trim(id);
+            StringUtility::trim(id, " \t");
             if (fout.is_open()) fout.close();
             file = out_dir + "/" + id;
             fout.open(file.c_str());
             fout << ">" << id << "\n";
             out_ids.push_back(id);
         } else {
-            boost::trim(line);
+            StringUtility::trim(line, " \t");
             fout << line << "\n";
         }
     }
@@ -352,6 +351,119 @@ int Fasta::split_by_id_pos(string & fasta_file, string & out_prefix, int length,
         fout_bed.close();
     }
 
+    return 0;
+}
+// }}}
+
+// class Fastq
+// {{{
+int Fastq::get_a_seq(istream & s, string & id, string & seq,
+        vector<int8_t> & qual)
+{
+    string line;
+    int r = -1;
+    while ( !s.eof() ) {
+        getline(s, line);
+        if ( line.empty() ) continue;
+        if (line[0]=='@') {
+            id = line.substr(1);
+            line.clear();
+            getline(s, seq);
+            StringUtility::trim(seq, " \t\n\r");
+            if (seq.empty()) { r = 1; break; }
+            getline(s, line);
+            if (line[0]!='+') { r = 2; break; }
+            line.clear();
+            getline(s, line);
+            if (line.size()!=seq.size()) { 
+                cerr<< "E: length of QUAL is not the same as SEQ. "
+                    << CZL_DBG_INFO << endl;
+                r = 3;
+                break; 
+            }
+            if ( Fastq::str_to_qual(line, qual) ) {
+                r=4;
+            }
+            line.clear();
+            r = 0;
+            break;
+        }
+        line.clear();
+    }
+    return r;
+}
+
+int Fastq::get_a_seq(istream & s, string & id, string & seq, string & qual)
+{
+    string line;
+    int r = -1;
+    while ( !s.eof() ) {
+        getline(s, line);
+        if ( line.empty() ) continue;
+        if (line[0]=='@') {
+            id = line.substr(1);
+            line.clear();
+            getline(s, seq);
+            StringUtility::trim(seq, " \t\n\r");
+            if (seq.empty()) { r = 1; break; }
+            getline(s, line);
+            if (line[0]!='+') { r = 2; break; }
+            qual.clear();
+            getline(s, qual);
+            if (qual.size()!=seq.size()) { 
+                cerr<< "E: length of QUAL is not the same as SEQ. "
+                    << CZL_DBG_INFO << endl;
+                r = 3;
+                break; 
+            }
+            r = 0;
+            break;
+        }
+        line.clear();
+    }
+    return r;
+}
+
+int Fastq::put_a_seq(ostream & s, string & id, string & seq,
+        vector<int8_t> & qual)
+{
+    s << '@' << id << '\n' << seq << "\n+\n";
+    string qual_s;
+    for (int i=0; i<qual.size(); i++) {
+        s << static_cast<char>(qual[i]+33);
+    }
+    if (s.fail()) return 1;
+    else return 0;
+}
+
+int Fastq::put_a_seq(ostream & s, string & id, string & seq, string & qual)
+{
+    s << '@' << id << '\n' << seq << "\n+\n" << qual;
+    if (s.fail()) return 1;
+    else return 0;
+}
+
+int Fastq::str_to_qual(string const & s, vector<int8_t> & qual)
+{
+    qual.resize(s.size());
+    for (int i=0; i<s.size(); i++) {
+        qual[i] = s[i]-33;
+        // if quality < 0
+        if (qual[i]<0) {
+            cerr<< "E: QUAL is below Zero at position " << i << " "
+                << CZL_DBG_INFO << endl;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int Fastq::qual_to_str(vector<int8_t> const & qual, string & s)
+{
+    s.clear();
+    for (int i=0; i<qual.size(); i++) {
+        s.push_back(static_cast<char>(qual[i]+33));
+    }
     return 0;
 }
 // }}}
@@ -745,7 +857,7 @@ int Fasta::split_by_id_pos(string & fasta_file, string & out_prefix, int length,
 //        }
 //    }
 //    if (fout.is_open()) fout.close();
-//	return 0;
+//    return 0;
 //}
 //// }}}
 //
@@ -811,7 +923,7 @@ int Fasta::split_by_id_pos(string & fasta_file, string & out_prefix, int length,
 //        }
 //    }
 //    if (fout.is_open()) fout.close();
-//	return 0;
+//    return 0;
 //}
 //
 //int VCF::split_by_pos(const string & vcf_file, const string & out_dir, Int len, string & out_pos_file)
@@ -820,9 +932,9 @@ int Fasta::split_by_id_pos(string & fasta_file, string & out_prefix, int length,
 //}
 //
 //struct TmpA {
-//	string chr;	
-//	int64_t pos;
-//	string data;
+//    string chr;    
+//    int64_t pos;
+//    string data;
 //};
 ///**
 // * @brief  split VCF file by id and position
@@ -837,14 +949,14 @@ int Fasta::split_by_id_pos(string & fasta_file, string & out_prefix, int length,
 //    ifstream fin(vcf_file.c_str());
 //    if ( !fin.is_open() ) {
 //        cerr << "Can't open FILE " << vcf_file << endl;
-//		return 1;
+//        return 1;
 //    }
 //    ofstream fout_bed;
 //    if (out_bed_file !=NULL) {
 //        fout_bed.open(out_bed_file->c_str());
 //        if ( !fout_bed.is_open() ) {
 //            cerr << "Can't opne FILE " << *out_bed_file << endl;
-//			return 2;
+//            return 2;
 //        }
 //    }
 //    string line, file;
@@ -852,96 +964,96 @@ int Fasta::split_by_id_pos(string & fasta_file, string & out_prefix, int length,
 //    ofstream fout(file.c_str());
 //    short r = 0;
 //    vector<string> tab;
-//	list<TmpA*> vs;
+//    list<TmpA*> vs;
 //    string chr0;
-//	int64_t begin, end, len;
-//	int64_t pos;
-//	int i, j;
-//	if (is_sorted) {
-//		begin = 0;
-//		end = begin+length;
-//		while (!fin.eof()) {
-//			getline(fin, line);
-//			boost::trim(line);
-//			if (line.empty()) {
-//				continue;
-//			} else if (line[0]=='#') {
-//				if (r==0) {
-//					fout << line << "\n";
-//				}
-//			} else {
-//				if (r==0) {
-//					fout.close();
-//					r=1;
-//				}
-//				i = line.find('\t');
-//				string chr = line.substr(0, i);
-//				j=i+1;
-//				i = line.find('\t', j);
-//				pos = atol(line.substr(j, i-j).c_str());
-//				if (chr!=chr0 || pos >= end) {
-//					if (fout.is_open()) fout.close();
-//					if (chr==chr0) {
-//						begin += step;
-//					} else {
-//						chr0 = chr;
-//						begin = 0;
-//						BOOST_FOREACH(TmpA *a, vs) {
-//							delete a;
-//						}
-//						vs.clear();
-//					}
-//					end = begin+length;
-//					stringstream name, ss1;
-//					name << chr << "_" << begin << "_" << end;
-//					ss1 << out_prefix << name.str();
-//					fout.open(ss1.str().c_str());
-//					if (out_bed_file!=NULL) {
-//						fout_bed << chr << "\t" << begin << "\t" << end << "\n";
-//					}
+//    int64_t begin, end, len;
+//    int64_t pos;
+//    int i, j;
+//    if (is_sorted) {
+//        begin = 0;
+//        end = begin+length;
+//        while (!fin.eof()) {
+//            getline(fin, line);
+//            boost::trim(line);
+//            if (line.empty()) {
+//                continue;
+//            } else if (line[0]=='#') {
+//                if (r==0) {
+//                    fout << line << "\n";
+//                }
+//            } else {
+//                if (r==0) {
+//                    fout.close();
+//                    r=1;
+//                }
+//                i = line.find('\t');
+//                string chr = line.substr(0, i);
+//                j=i+1;
+//                i = line.find('\t', j);
+//                pos = atol(line.substr(j, i-j).c_str());
+//                if (chr!=chr0 || pos >= end) {
+//                    if (fout.is_open()) fout.close();
+//                    if (chr==chr0) {
+//                        begin += step;
+//                    } else {
+//                        chr0 = chr;
+//                        begin = 0;
+//                        BOOST_FOREACH(TmpA *a, vs) {
+//                            delete a;
+//                        }
+//                        vs.clear();
+//                    }
+//                    end = begin+length;
+//                    stringstream name, ss1;
+//                    name << chr << "_" << begin << "_" << end;
+//                    ss1 << out_prefix << name.str();
+//                    fout.open(ss1.str().c_str());
+//                    if (out_bed_file!=NULL) {
+//                        fout_bed << chr << "\t" << begin << "\t" << end << "\n";
+//                    }
 //
-//					BOOST_FOREACH(TmpA *a, vs) {
-//						if (a->pos>=begin && a->pos<end) {
-//							fout << a->data << "\n";
-//						} else {
-//							break;
-//						}
-//					}
-//					while (!vs.empty() && vs.front()->pos < begin+step) {
-//						delete(vs.front());
-//						vs.pop_front();
-//					}
-//				}
-//				fout << line << "\n";
-//				if ( pos >= begin+step ) {
-//					TmpA *a = new TmpA;
-//					a->chr  = chr;
-//					a->pos  = pos;
-//					a->data = line;
-//					vs.push_back(a);
-//				}
-//			}
-//		}
-//		if (fout.is_open()) {
-//			BOOST_FOREACH(TmpA *a, vs) {
-//				if (a->pos>=begin && a->pos<end) {
-//					fout << a->data << "\n";
-//				} else {
-//					break;
-//				}
-//			}
-//			while (!vs.empty()) {
-//				delete(vs.front());
-//			}
-//			vs.clear();
-//			fout.close();
-//		}
-//	}
-//	if (out_bed_file!=NULL) {
-//		fout_bed.close();
-//	}
+//                    BOOST_FOREACH(TmpA *a, vs) {
+//                        if (a->pos>=begin && a->pos<end) {
+//                            fout << a->data << "\n";
+//                        } else {
+//                            break;
+//                        }
+//                    }
+//                    while (!vs.empty() && vs.front()->pos < begin+step) {
+//                        delete(vs.front());
+//                        vs.pop_front();
+//                    }
+//                }
+//                fout << line << "\n";
+//                if ( pos >= begin+step ) {
+//                    TmpA *a = new TmpA;
+//                    a->chr  = chr;
+//                    a->pos  = pos;
+//                    a->data = line;
+//                    vs.push_back(a);
+//                }
+//            }
+//        }
+//        if (fout.is_open()) {
+//            BOOST_FOREACH(TmpA *a, vs) {
+//                if (a->pos>=begin && a->pos<end) {
+//                    fout << a->data << "\n";
+//                } else {
+//                    break;
+//                }
+//            }
+//            while (!vs.empty()) {
+//                delete(vs.front());
+//            }
+//            vs.clear();
+//            fout.close();
+//        }
+//    }
+//    if (out_bed_file!=NULL) {
+//        fout_bed.close();
+//    }
 //
-//	return 0;
+//    return 0;
 //}
 //// }}}
 
@@ -1359,14 +1471,14 @@ void CZLDB::split_by_pos(string &db_dir, string &out_dir, Int split_len, string 
 bool is_gz(const char *fname)
 {
     int i=0;
-	ifstream fin(fname, ios::binary);
-	uint8_t byte1=0, byte2=0;
-	fin.read((char*)&byte1, sizeof(byte1));
-	if (fin.fail()) return false; 
-	fin.read((char*)&byte2, sizeof(byte2));
-	if (fin.fail()) return false; 
-	fin.close();
-	return byte1==0x1f && byte2==0x8b;
+    ifstream fin(fname, ios::binary);
+    uint8_t byte1=0, byte2=0;
+    fin.read((char*)&byte1, sizeof(byte1));
+    if (fin.fail()) return false; 
+    fin.read((char*)&byte2, sizeof(byte2));
+    if (fin.fail()) return false; 
+    fin.close();
+    return byte1==0x1f && byte2==0x8b;
 }
 
 bool is_gz(const string & fname)

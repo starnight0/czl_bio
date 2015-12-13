@@ -6,15 +6,11 @@
 #ifndef CZL_IO_H
 #define CZL_IO_H
 
-#include "czl_common.h"
-#include "czl_bio_base.h"
-//#include "czl_bio_annot.h"
-#include "boost/algorithm/string.hpp"
-#include "boost/algorithm/string_regex.hpp"
-#include "boost/foreach.hpp"
-#include "boost/filesystem.hpp"
-#include "boost/lexical_cast.hpp"
-#include <gzstream.h>
+#include <cstdio>
+#include <sys/stat.h>
+#include <cerrno>
+#include "czl_common.hpp"
+#include "czl_bio_base.hpp"
 
 using namespace std;
 
@@ -37,6 +33,62 @@ public:
 
     static int split_by_id(string & file, string & out_dir, vector<string> & out_ids);
     static int split_by_id_pos(string & fasta_file, string & out_prefix, int length, int step, string * out_bed_file=NULL);
+};
+
+class Fastq {
+public:
+    /**
+     * @brief  read a sequence and quality from fastq file
+     * @param  s     input stream
+     * @param  id    output sequence name
+     * @param  seq   output sequence
+     * @param  qual  output sequence quality
+     * @return  0  if success, 
+     *          -1 if no more sequence, 
+     *          1  if no sequence, 
+     *          2  if no '+' after sequence, 
+     *          3  if no quality
+     *          4  if quality is less than 0.
+     */
+    static int get_a_seq(istream & s, string & id, string & seq, vector<int8_t> & qual);
+    /**
+     * @brief  read a sequence and quality from fastq file, not convert qual
+     * @param  s     input stream
+     * @param  id    output sequence name
+     * @param  seq   output sequence
+     * @param  qual  output sequence quality
+     * @return  0  if success, 
+     *          -1 if no more sequence, 
+     *          1  if no sequence, 
+     *          2  if no '+' after sequence, 
+     *          3  if no quality
+     *          4  if quality is less than 0.
+     */
+    static int get_a_seq(istream & s, string & id, string & seq, string & qual);
+
+    /**
+     * @brief  write a sequence and quality into fastq file
+     * @param  s     output stream
+     * @param  id    sequence name
+     * @param  seq   sequence
+     * @param  qual  sequence quality
+     * @return  always 0
+     */
+    static int put_a_seq(ostream & s, string & id, string & seq, vector<int8_t> & qual);
+
+    /**
+     * @brief  write a sequence and quality into fastq file, not convert qual
+     * @param  s     output stream
+     * @param  id    sequence name
+     * @param  seq   sequence
+     * @param  qual  sequence quality
+     * @return  always 0
+     */
+    static int put_a_seq(ostream & s, string & id, string & seq, string & qual);
+
+    static int str_to_qual(string const & s, vector<int8_t> & qual);
+
+    static int qual_to_str(vector<int8_t> const & qual, string & s);
 };
 
 /*
@@ -125,24 +177,26 @@ public:
             data = a.data;
             id   = a.id;
         }
+        /*
         bool operator<(const A & a)
         {
-            return less_fun(this->data, a.data);
+            return less_fun1(this->data, a.data);
         }
         bool operator>(const A & a)
         {
-            return less_fun(a.data, this->data);
+            return less_fun1(a.data, this->data);
         }
         istream & operator >> (istream & s)
         {
-            read_fun(s, data);
+            read_fun1(s, data);
             return s;
         }
         ostream & operator << (ostream & s)
         {
-            write_fun(s, data);
+            write_fun1(s, data);
             return s;
         }
+        */
 
         A & operator = (const A & a)
         {
@@ -196,11 +250,15 @@ public:
     {
         Less less(less_fun);
         Great great(less_fun);
-        std::ios_base::openmode mode;
+        std::ios_base::openmode in_mode, out_mode;
         if (is_io_binary) {
-            mode |= std::ios::binary;
+            in_mode = ios_base::in | ios_base::binary;
+            out_mode = ios_base::out | ios_base::binary;
+        } else {
+            in_mode = ios_base::in;
+            out_mode = ios_base::out;
         }
-        ifstream fin(in.c_str(), mode);
+        ifstream fin(in.c_str(), in_mode);
         if ( fin.fail() ) {
             cerr << "Can't open FILE " << in << endl;
             return 1;
@@ -214,7 +272,7 @@ public:
                 stringstream ss;
                 ss << tmp_dir << "/0_" << m;
                 string file = ss.str();
-                ofstream fout( file.c_str(), mode );
+                ofstream fout( file.c_str(), out_mode );
                 for (size_t i=0; i<n; i++) write_fun(fout, ts[i].data);
                 fout.close();
                 ts.clear();
@@ -231,7 +289,7 @@ public:
             sort(ts.begin(), ts.end(), less);
             stringstream ss;
             ss << tmp_dir << "/0_" << m;
-            ofstream fout( ss.str().c_str(), mode);
+            ofstream fout( ss.str().c_str(), out_mode);
             for (size_t i=0; i<n; i++) write_fun(fout, ts[i].data);
             fout.close();
             ts.clear();
@@ -257,19 +315,19 @@ public:
                     stringstream ss1;
                     ss1 << tmp_dir << "/" << run << "_" << i1;
                     string in_name1 = ss1.str();
-                    boost::filesystem::rename(in_name1, out_name1);
+                    rename(in_name1.c_str(), out_name1.c_str());
                     m1++;
                     break;
                 }
                 int mm = i2-i1;
                 int write_n=0;
-                ifstream fin1[mm];
+                ifstream *fin1 = new ifstream[mm];
                 for (int i=i1; i<i2; i++) {
                     stringstream ss1;
                     ss1 << tmp_dir << "/" << run << "_" << i;
                     string in_name1 = ss1.str();
                     int j=i-i1;
-                    fin1[j].open(in_name1.c_str(), mode);
+                    fin1[j].open(in_name1.c_str(), in_mode);
                 //  fin1[j].rdbuf()->pubsetbuf(in_buf[j], N);
                 }
                 ofstream fout1(out_name1.c_str(), ios::binary);
@@ -311,8 +369,10 @@ public:
                     stringstream ss1;
                     ss1 << tmp_dir << "/" << run << "_" << i+i1;
                     string in_name1 = ss1.str();
-                    boost::filesystem::remove(in_name1);
+                    int r = remove(in_name1.c_str());
+                    if ( r ) { return 3; }
                 }
+                delete []fin1;
                 m1++;
             }
             m = m1;
@@ -322,11 +382,23 @@ public:
             stringstream ss;
             ss << tmp_dir << "/" << run << "_0";
             string tmp=ss.str();
-            if (boost::filesystem::exists(out)) {
-                boost::filesystem::remove(out);
+            struct stat st;
+        //  if ( stat(out.c_str(), &st) ) {
+        //      cerr << "E: " << strerror(errno) << CZL_DBG_INFO << endl;
+        //      return errno;
+        //  }
+        //  if ( S_ISREG(st.st_mode) ) {
+        //      int r = remove(out.c_str());
+        //      if ( r ) { return 3; }
+        //  }
+
+            if ( stat(tmp.c_str(), &st) ) {
+                cerr << "E: " << strerror(errno) << CZL_DBG_INFO << endl;
+                return errno;
             }
-            if (boost::filesystem::exists(tmp)) {
-                boost::filesystem::rename(tmp, out);
+            if ( S_ISREG(st.st_mode) ) {
+                int r = rename(tmp.c_str(), out.c_str());
+                if ( r ) { return 4; }
             }
         }
         // }}}
@@ -339,30 +411,11 @@ public:
 
 };
 
-/* 
+/** 
  * check if a fname is .gz
  */
 bool is_gz(const char *fname);
 bool is_gz(const string & fname);
-
-/*
- * check if big-endian
- */
-bool is_be()
-{
-	uint8_t a[4] = {0x01, 0x0, 0x0, 0x0};
-	uint32_t b;
-	memcpy(&b, a, sizeof(uint32_t));
-	return b!=1;
-}
-
-/*
- * return the number of address bits on the current machine
- */
-int machine_bit()
-{
-	return sizeof(void*)*8;
-}
 
 };
 
