@@ -34,8 +34,9 @@
 #include <pthread.h>
 #endif
 
-#define CZL_DBG_INFO "(" << __FILE__ << ":" << __LINE__ << ":" << __FUNCTION__ << ")"
-#define CZL_DBG_INFO_S (string("(") +__FILE__ + ":" +__LINE__ + ":" +__FUNCTION__ + ")")
+//#define CZL_DBG_INFO "(" << __FILE__ << ":" << __LINE__ << ":" << __FUNCTION__ << ")"
+#define CZL_DBG_INFO (string("(") + __FILE__ + ":" + itos(__LINE__) + ":" + __FUNCTION__ + ")")
+#define CZL_CUR_TIME ( str_time(time(NULL)) + ", " + ftos((float)clock()/CLOCKS_PER_SEC ) )
 
 using namespace std;
 
@@ -64,10 +65,8 @@ namespace czl_bio {
 //  typedef std::pair<Int,Int> Int2;
 
     #define DECL_TYPE_NAME(x) template<> struct type_name<x> { static const char* name() {return #x;} }   
-    #define OPT_STR(name, value) ( #name = #value;)
-    #define OPT_I(name, value) (#name = atol(#value.c_str());)
-    #define OPT_F(name, value) (#name = atof(#value.c_str());)
 
+	string atos(char *str);
     char* itoa(int n);
     string itos(int n);
     char* ltoa(long int n);
@@ -164,21 +163,26 @@ namespace czl_bio {
         short is_fail();
         short fail();
 
-        void error(const char msg[], const char file[], int line, short is_flush=0);
-        void error(string & msg, string & file, int line, short is_flush=0);
-        void error(stringstream & msg, const char file[], int line, short is_flush=0);
-        void error(stringstream & msg, string & file, int line, short is_flush=0);
-        void error(const char msg[], short is_flush=0);
-        void error(string & msg, short is_flush=0);
-        void error(stringstream & msg_ss, short is_flush=0);
+		Msg & print(const char head[], const char msg[], short is_flush=0, short where=3);
+		Msg & print(const string & head, const string & msg, short is_flush=0, short where=3);
+		Msg & print(const char msg[], short is_flush=0, short where=3);
+		Msg & print(const string & msg, short is_flush=0, short where=3);
 
-        void warn(const char msg[], const char file[], int line, short is_flush=0);
-        void warn(string & msg, string & file, int line, short is_flush=0);
-        void warn(stringstream & msg, const char file[], int line, short is_flush=0);
-        void warn(stringstream & msg, string & file, int line, short is_flush=0);
-        void warn(const char msg[], short is_flush=0);
-        void warn(string & msg, short is_flush=0);
-        void warn(stringstream & msg_ss, short is_flush=0);
+        Msg & error(const char msg[], short is_flush=0, short where=3);
+        Msg & error(const char msg[], const char file[], int line, short is_flush=0, short where=3);
+        Msg & error(string const & msg, string & file, int line, short is_flush=0, short where=3);
+        Msg & error(stringstream & msg, const char file[], int line, short is_flush=0, short where=3);
+        Msg & error(stringstream & msg, string & file, int line, short is_flush=0, short where=3);
+        Msg & error(string const & msg, short is_flush=0, short where=3);
+        Msg & error(stringstream & msg_ss, short is_flush=0, short where=3);
+
+        Msg & warn(const char msg[], short is_flush=0, short where=3);
+        Msg & warn(const char msg[], const char file[], int line, short is_flush=0, short where=3);
+        Msg & warn(string const & msg, string & file, int line, short is_flush=0, short where=3);
+        Msg & warn(stringstream & msg, const char file[], int line, short is_flush=0, short where=3);
+        Msg & warn(stringstream & msg, string & file, int line, short is_flush=0, short where=3);
+        Msg & warn(string const & msg, short is_flush=0, short where=3);
+        Msg & warn(stringstream & msg_ss, short is_flush=0, short where=3);
 
         Msg& operator << (const int i);
         Msg& operator << (const unsigned int i);
@@ -198,8 +202,9 @@ namespace czl_bio {
         Msg& flush();
         Msg& flush(Msg& msg);
     private:
-        Msg(Msg &);
+        Msg(Msg const &);
     };
+	static Msg msg;
     //
 
     /*

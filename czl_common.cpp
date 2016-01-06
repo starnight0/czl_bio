@@ -14,6 +14,11 @@ namespace czl_bio {
  * string -- number convertor
  */
 // {{{
+string atos(char *str)
+{
+    return string(str);
+}
+
 char* itoa(int n)
 {
     int base=10;
@@ -281,7 +286,7 @@ Msg::Msg(const char file[])
 #endif
 }
 
-Msg::Msg(Msg & msg)
+Msg::Msg(Msg const & msg)
 {
 }
 
@@ -344,100 +349,55 @@ short Msg::fail()
     return os_m.fail();
 }
 
-void Msg::error(const char msg[], const char file[], int line, short is_flush)
+Msg & Msg::print(const char head[], const char msg[], short is_flush, short where)
 {
 #ifdef PTHREAD
     pthread_mutex_lock(&lock_m);
 #endif
-    cerr << "E: " << msg << " (" << file << ":" << line << ")\n"; 
-    os_m << "E: " << msg << " (" << file << ":" << line << ")\n"; 
-    if (is_flush) {
-        cerr << std::flush;
-        os_m << std::flush;
+    if ( where&0x1) {
+        cerr << head << msg << "\n";
+        if (is_flush) {
+            cerr << std::flush;
+        }
     }
-    os_m.close();
+    if ( where&0x2) {
+        os_m << head << msg << "\n";
+        if (is_flush) {
+            os_m << std::flush;
+        }
+    }
 #ifdef PTHREAD
     pthread_mutex_unlock(&lock_m);
 #endif
-    exit(1);
+    return *this;
 }
 
-void Msg::error(stringstream & msg, const char file[], int line, short is_flush)
+Msg & Msg::print(string const & head, string const & msg, short is_flush, short where)
 {
-    error(msg.str().c_str(), file, line, is_flush);
+    return print(head.c_str(), msg.c_str(), is_flush, where);
 }
 
-void Msg::error(stringstream & msg, string & file, int line, short is_flush)
+Msg & Msg::print(const char msg[], short is_flush, short where)
 {
-    error(msg.str().c_str(), file.c_str(), line, is_flush);
+    return print("", msg, is_flush, where);
 }
 
-void Msg::error(string & msg, string & file, int line, short is_flush)
+Msg & Msg::print(const string & msg, short is_flush, short where)
 {
-    error(msg.c_str(), file.c_str(), line, is_flush);
+    return print("", msg.c_str(), is_flush, where);
 }
 
-void Msg::error(const char msg[], short is_flush)
+Msg & Msg::error(const char msg[], const char file[], int line, short is_flush, short where)
 {
 #ifdef PTHREAD
     pthread_mutex_lock(&lock_m);
 #endif
-    
-//    for (size_t i=0; i<msg_m.size(); i++) {
-//        os_m << msg_m[i] << endl;
-//    }
-//    msg_m.clear();
-    cerr << "E: " << msg << "\n"; 
-    os_m << "E: " << msg << "\n"; 
-    if (is_flush) {
-        cerr << std::flush;
-        os_m << std::flush;
+    if ( where&0x1) {
+        cerr << "E: " << msg << " (" << file << ":" << line << ")\n"; 
     }
-    os_m.close();
-#ifdef PTHREAD
-    pthread_mutex_unlock(&lock_m);
-#endif
-    exit(1);
-}
-
-void Msg::error(string & msg, short is_flush)
-{
-    error(msg.c_str(), is_flush);
-}
-
-void Msg::error(stringstream & msg, short is_flush)
-{
-    error(msg.str().c_str(), is_flush);
-}
-
-void Msg::warn(const char msg[], short is_flush)
-{
-//    string msg1 = "W ";
-//    char a[128];
-//    sprintf(a, "%i", nw);
-//    nw++;
-//    msg1 = msg1+ a + ": " + msg;
-#ifdef PTHREAD
-    pthread_mutex_lock(&lock_m);
-#endif
-//    msg_m.push_back(msg1);
-//    if (msg_m.size()>=N) {
-//        for (size_t i=0; i<msg_m.size(); i++) {
-//            os_m << msg_m[i] << endl;
-//        }
-//        msg_m.clear();
-//    }
-//    if (nw%N == 0) {
-//        std::cerr << "More than " << nw << " Warnnings." << endl;
-//    //  std::cout << "More than " << nw << " Warnnings. Continue? [Y|n]: ";
-//        char c;
-//    //  std::cin >> c;
-//    //  if (c=='N' || c=='n' || c=='\n') {
-//    //      exit(1);
-//    //  }
-//    }
-    cerr << "W: " << msg << "\n"; 
-    os_m << "W: " << msg << "\n"; 
+    if ( where&0x2) {
+        os_m << "E: " << msg << " (" << file << ":" << line << ")\n"; 
+    }
     if (is_flush) {
         cerr << std::flush;
         os_m << std::flush;
@@ -445,25 +405,65 @@ void Msg::warn(const char msg[], short is_flush)
 #ifdef PTHREAD
     pthread_mutex_unlock(&lock_m);
 #endif
+    return *this;
 }
 
-void Msg::warn(string & msg, short is_flush)
+Msg & Msg::error(stringstream & msg, const char file[], int line, short is_flush, short where)
 {
-    warn(msg.c_str(), is_flush);
+    return error(msg.str().c_str(), file, line, is_flush, where);
 }
 
-void Msg::warn(stringstream & msg, short is_flush)
+Msg & Msg::error(stringstream & msg, string & file, int line, short is_flush, short where)
 {
-    warn(msg.str().c_str(), is_flush);
+    return error(msg.str().c_str(), file.c_str(), line, is_flush, where);
 }
 
-void Msg::warn(const char msg[], const char file[], int line, short is_flush)
+Msg & Msg::error(string const & msg, string & file, int line, short is_flush, short where)
+{
+    return error(msg.c_str(), file.c_str(), line, is_flush, where);
+}
+
+Msg & Msg::error(const char msg[], short is_flush, short where)
+{
+    return print("E: ", msg, is_flush, where);
+}
+
+Msg & Msg::error(string const & msg, short is_flush, short where)
+{
+    return error(msg.c_str(), is_flush, where);
+}
+
+Msg & Msg::error(stringstream & msg, short is_flush, short where)
+{
+    return error(msg.str().c_str(), is_flush, where);
+}
+
+Msg & Msg::warn(const char msg[], short is_flush, short where)
+{
+    return print("W: ", msg, is_flush, where);
+}
+
+Msg & Msg::warn(string const & msg, short is_flush, short where)
+{
+    return warn(msg.c_str(), is_flush, where);
+}
+
+Msg & Msg::warn(stringstream & msg, short is_flush, short where)
+{
+    return warn(msg.str().c_str(), is_flush, where);
+}
+
+Msg & Msg::warn(const char msg[], const char file[], int line, short is_flush, short where)
 {
 #ifdef PTHREAD
     pthread_mutex_lock(&lock_m);
 #endif
-    cerr << "W: " << msg << "(" << file << ":" << line << ")\n"; 
-    os_m << "W: " << msg << "(" << file << ":" << line << ")\n"; 
+    if ( where&0x1) {
+        cerr << "W: " << msg << "(" << file << ":" << line << ")\n"; 
+    }
+    if ( where&0x2) {
+        os_m << "W: " << msg << "(" << file << ":" << line << ")\n"; 
+    }
     if (is_flush) {
         cerr << std::flush;
         os_m << std::flush;
@@ -471,21 +471,22 @@ void Msg::warn(const char msg[], const char file[], int line, short is_flush)
 #ifdef PTHREAD
     pthread_mutex_unlock(&lock_m);
 #endif
+    return *this;
 }
 
-void Msg::warn(string & msg, string & file, int line, short is_flush)
+Msg & Msg::warn(string const & msg, string & file, int line, short is_flush, short where)
 {
-    warn(msg.c_str(), file.c_str(), line, is_flush);
+    return warn(msg.c_str(), file.c_str(), line, is_flush, where);
 }
 
-void Msg::warn(stringstream & msg, string & file, int line, short is_flush)
+Msg & Msg::warn(stringstream & msg, string & file, int line, short is_flush, short where)
 {
-    warn(msg.str().c_str(), file.c_str(), line, is_flush);
+    return warn(msg.str().c_str(), file.c_str(), line, is_flush, where);
 }
 
-void Msg::warn(stringstream & msg, const char file[], int line, short is_flush)
+Msg & Msg::warn(stringstream & msg, const char file[], int line, short is_flush, short where)
 {
-    warn(msg.str().c_str(), file, line, is_flush);
+    return warn(msg.str().c_str(), file, line, is_flush, where);
 }
 
 Msg& Msg::operator << (const int i)
