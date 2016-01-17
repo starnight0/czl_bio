@@ -203,37 +203,44 @@ ifstream & Fasta::get_a_seq(ifstream & fin, BioFileSeq & seq, string & file)
 }
 */
 
-istream & Fasta::get_a_seq(istream & fin, string & id, string & seq)
+int Fasta::get_a_seq(istream & fin, string & id, string & seq)
 {
     char c;
     short si=0;
+	int r = 0;
     string line;
     seq.clear();
     while (!fin.eof()) {
+		c='\0';
         fin >> c;
         if (c=='>') {
             if (si==0) {
                 getline(fin, line);
-                StringUtility::trim(line, " \t");
+                StringUtility::trim(line, " \t\n\r");
+				if ( line.empty() ) {
+					id.clear();
+					r = 1; // seq name is empty
+					break;
+				}
                 id = line;
                 si=1;
             } else {
                 fin.unget();
                 break;
             }
-        } else if (c=='\n' || c=='\r') {
-        } else if (c==EOF) {
-            break;
-        } else if (!isspace(c)) {
+        } else if ( !(c=='\0' || isspace(c)) ) {
             line.clear();
             getline(fin, line);
-            StringUtility::trim(line, " \t");
-            StringUtility::erase_all(line, " \t");
+            StringUtility::trim(line, " \t\r\n");
+            StringUtility::erase_all(line, " \t\r\n");
             seq+=c;
             seq+=line;
         }
     }
-    return fin;
+	if ( seq.empty() ) {
+		r = 2;
+	}
+    return r;
 }
 
 /*
@@ -246,10 +253,11 @@ ofstream & Fasta::put_all_seq(ofstream & fout, vector<BioSeq> & seqs)
 }
 */
 
-ostream & Fasta::put_a_seq(ostream & fout, const string & id, const string & seq)
+int Fasta::put_a_seq(ostream & fout, const string & id, const string & seq)
 {
     fout << ">" << id << "\n" << seq << "\n";
-    return fout;
+	if ( fout.fail() ) return 1;
+	else return 0;
 }
 
 /*
@@ -263,38 +271,38 @@ ofstream & Fasta::put_a_seq(ofstream & fout, BioSeq & seq)
 }
 */
 
-int Fasta::split_by_id(string & fasta_file, string & out_dir, vector<string> & out_ids)
+int Fasta::split_by_id(string const & fasta_file, string const & out_prefix, vector<string> & out_ids)
 {
+	int r = 0;
     ifstream fin(fasta_file.c_str());
     if ( !fin.is_open() ) {
         return -1;
     }
-    string line, file;
+    string line, out_file;
     ofstream fout;
-    string id;
+    string id, seq;
     while (!fin.eof()) {
-        line.clear();
-        getline(fin, line);
-        StringUtility::trim(line, " \t");
-        if (line.empty()) continue;
-
-        if (line[0]=='#') {
-            continue;
-        } else if (line[0]=='>') {
-            id = line.substr(1);
-            StringUtility::trim(id, " \t");
-            if (fout.is_open()) fout.close();
-            file = out_dir + "/" + id;
-            fout.open(file.c_str());
-            fout << ">" << id << "\n";
-            out_ids.push_back(id);
-        } else {
-            StringUtility::trim(line, " \t");
-            fout << line << "\n";
-        }
+		if ( get_a_seq(fin, id, seq) ) break;
+		out_file = out_prefix + id + ".fa";
+		fout.open(out_file.c_str());
+		if ( fout.fail() ) {
+			msg.error( string("Fail to open File ") + out_file + " " + CZL_DBG_INFO);
+			r = -2;
+		}
+		put_a_seq(fout, id, seq);
+		out_ids.push_back(id);
+		fout.close();
     }
-    if (fout.is_open()) fout.close();
     fin.close();
+	if ( r!=0 ) {
+		for ( size_t i=0; i<=out_ids.size(); i++ ) {
+			out_file = out_prefix + out_ids[i] + ".fa";
+			if ( File::exists_file(out_file) ) {
+				remove(out_file.c_str());
+			}
+		}
+	}
+	return 0;
 }
 
 /*
@@ -306,7 +314,7 @@ int Fasta::split_by_id(string & fasta_file, string & out_dir, vector<string> & o
  * @param  out_bed_file  output bed files for splited position
  * @return 0  if success, other if failed
  */
-int Fasta::split_by_id_pos(string & fasta_file, string & out_prefix, int length, int step, string * out_bed_file)
+int Fasta::split_by_id_pos(string const & fasta_file, string const & out_prefix, int length, int step, string * out_bed_file)
 {
     ifstream fin(fasta_file.c_str());
     if ( !fin.is_open() ) {
@@ -331,7 +339,7 @@ int Fasta::split_by_id_pos(string & fasta_file, string & out_prefix, int length,
             end = begin+length;
             if (end > seq.size()) end = seq.size();
             stringstream ss, name;
-            name << id << "_" << begin << "_" << begin+length;
+            name << id << "_" << begin << "_" << begin+length << ".fa";
             ss << out_prefix << name.str();
             ofstream fout(ss.str().c_str());
             if ( !fout.is_open() ) {
@@ -352,6 +360,200 @@ int Fasta::split_by_id_pos(string & fasta_file, string & out_prefix, int length,
     }
 
     return 0;
+}
+
+int Fasta::get_seq_num(string const & in_file, size_t & n)
+{
+	int r = 0;
+    ifstream fin(in_file.c_str());
+    if ( !fin.is_open() ) {
+        msg.error(string("Can't open INFILE ") + in_file + CZL_DBG_INFO);
+        return 1;
+    }
+	n = 0;
+	string id, seq;
+    while (!fin.eof()) {
+        if ( get_a_seq(fin, id, seq) ) { r = 2; break; }
+		n++;
+	}
+	fin.close();
+	return r;
+}
+
+int Fasta::get_seq_bp(string const & in_file, size_t & n)
+{
+	int r = 0;
+    ifstream fin(in_file.c_str());
+    if ( !fin.is_open() ) {
+        msg.error(string("Can't open INFILE ") + in_file + CZL_DBG_INFO);
+        return 1;
+    }
+	n = 0;
+	string id, seq;
+    while (!fin.eof()) {
+        if ( get_a_seq(fin, id, seq) ) { r = 2; break; }
+		n+=seq.size();
+	}
+	fin.close();
+	return r;
+}
+
+int Fasta::split_by_seq_num(string const & in_file, string const & out_prefix, size_t n)
+{
+	int r=0;
+    ifstream fin(in_file.c_str());
+    if ( !fin.is_open() ) {
+        msg.error(string("Can't open INFILE ") + in_file + CZL_DBG_INFO);
+        return 1;
+    }
+    string id, seq;
+    string out_file;
+	size_t m=0, k=0;
+    ofstream fout;
+    while (!fin.eof()) {
+        if ( get_a_seq(fin, id, seq) ) { r = 3; break; }
+		if ( ! fout.is_open() ) {
+			out_file = out_prefix + itos(m) + ".fa";
+			fout.open(out_file.c_str());
+			if ( fout.fail() ) {
+				msg.error(string("Can't open OUTFILE ") + out_file + CZL_DBG_INFO);
+				return 2;
+			}
+		}
+		if ( put_a_seq(fout, id, seq) ) { r=4; break; }
+		k++;
+		if ( k == n ) {
+			fout.close();
+			m++;
+			k=0;
+		}
+	}
+	fin.close();
+	if ( fout.is_open() ) fout.close();
+	if ( r!=0 ) {
+		for ( size_t i=0; i<=m; i++ ) {
+			out_file = out_prefix + itos(m) + ".fa";
+			if ( File::exists_file(out_file) ) {
+				remove(out_file.c_str());
+			}
+		}
+	}
+	return r;
+}
+
+int Fasta::split_by_file_num_eq_seq_num(string const & in_file, string const & out_prefix, size_t n)
+{
+	int r=0;
+	size_t seq_n = 0;
+	if ( r = get_seq_num(in_file, seq_n) ) return r;
+
+	size_t per_n;
+	per_n = seq_n/n;
+
+    ifstream fin(in_file.c_str());
+    if ( !fin.is_open() ) {
+        msg.error(string("Can't open INFILE ") + in_file + CZL_DBG_INFO);
+        return 1;
+    }
+    string id, seq;
+    string out_file;
+	size_t m=0, k=0;
+    ofstream fout;
+    while (!fin.eof()) {
+        if ( get_a_seq(fin, id, seq) ) { r = 3; break; }
+		if ( ! fout.is_open() ) {
+			out_file = out_prefix + itos(m) + ".fa";
+			fout.open(out_file.c_str());
+			if ( fout.fail() ) {
+				msg.error(string("Can't open OUTFILE ") + out_file + CZL_DBG_INFO);
+				return 2;
+			}
+		}
+		if ( put_a_seq(fout, id, seq) ) { r=4; break; }
+		k++;
+		if ( m<n-1 && k == per_n ) {
+			fout.close();
+			m++;
+			k=0;
+		}
+	}
+	fin.close();
+	if ( fout.is_open() ) fout.close();
+	if ( r!=0 ) {
+		for ( size_t i=0; i<=m; i++ ) {
+			out_file = out_prefix + itos(m) + ".fa";
+			if ( File::exists_file(out_file) ) {
+				remove(out_file.c_str());
+			}
+		}
+	}
+
+	return r;
+}
+
+int Fasta::split_by_file_num_eq_bp(string const & in_file, string const & out_prefix, size_t n)
+{
+	int r=0;
+	size_t bp = 0;
+	if ( r = get_seq_bp(in_file, bp) ) return r;
+
+	size_t per_bp;
+    if ( bp%n==0 ) {
+		per_bp = bp/n;
+	} else {
+		per_bp = bp/(n-1);
+	}
+
+	if ( per_bp==0 ) per_bp = 100;
+
+	r = split_by_bp(in_file, out_prefix, per_bp);
+
+	return r;
+}
+
+
+int Fasta::split_by_bp(string const & in_file, string const & out_prefix, size_t n)
+{
+	int r=0;
+    ifstream fin(in_file.c_str());
+    if ( fin.fail() ) {
+        msg.error(string("Can't open INFILE ") + in_file + CZL_DBG_INFO);
+        return 1;
+    }
+    string id, seq;
+    string out_file;
+	size_t m=0, k=0;
+    ofstream fout;
+    while (!fin.eof()) {
+        if ( get_a_seq(fin, id, seq) ) { r = 3; break; }
+		if ( !fout.is_open() ) {
+			out_file = out_prefix + itos(m) + ".fa";
+			fout.open(out_file.c_str());
+			if ( fout.fail() ) {
+				msg.error(string("Can't open OUTFILE ") + out_file + CZL_DBG_INFO);
+				r=2;
+				break;
+			}
+		}
+		if ( put_a_seq(fout, id, seq) ) { r=4; break; }
+		k += seq.size();
+		if ( k >= n ) {
+			fout.close();
+			m++;
+			k=0;
+		}
+	}
+	fin.close();
+	if ( fout.is_open() ) fout.close();
+	if ( r!=0 ) {
+		for ( size_t i=0; i<=m; i++ ) {
+			out_file = out_prefix + itos(m) + ".fa";
+			if ( File::exists_file(out_file) ) {
+				remove(out_file.c_str());
+			}
+		}
+	}
+	return r;
 }
 // }}}
 

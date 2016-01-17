@@ -25,14 +25,35 @@ public:
 //    static void get_all_seq(ifstream & fin, vector<BioFileSeq> & seqs, string & file);
 //    static ifstream & get_a_seq(ifstream & fin, BioSeq & seqs);
 //    static ifstream & get_a_seq(ifstream & fin, BioFileSeq & seqs, string & file);
-    static istream & get_a_seq(istream & fin, string & id, string & seq);
+    static int get_a_seq(istream & fin, string & id, string & seq);
 
 //    static ofstream & put_all_seq(ofstream & fout, vector<BioSeq> & seqs);
-    static ostream & put_a_seq(ostream & fout, const string & id, const string & seq);
+    static int put_a_seq(ostream & fout, const string & id, const string & seq);
 //    static ofstream & put_a_seq(ofstream & fout, BioSeq & seq);
+	/**
+	 * @brief get the number of sequence in a fasta file
+	 * @param in_file  input fasta file
+	 * @param n  number of sequences in the file
+	 * @return  0 if success, 1 if fail to open in_file, 2 if fail to get a
+	 *          sequence
+	 */
+	static int get_seq_num(string const & in_file, size_t & n);
 
-    static int split_by_id(string & file, string & out_dir, vector<string> & out_ids);
-    static int split_by_id_pos(string & fasta_file, string & out_prefix, int length, int step, string * out_bed_file=NULL);
+	/**
+	 * @brief get the bp's of sequence in a fasta file
+	 * @param in_file  input fasta file
+	 * @param n  number of sequences base-pairs in the file
+	 * @return  0 if success, 1 if fail to open in_file, 2 if fail to get a
+	 *          sequence
+	 */
+	static int get_seq_bp(string const & in_file, size_t & n);
+
+    static int split_by_id(string const & file, string const & out_dir, vector<string> & out_ids);
+    static int split_by_id_pos(string const & fasta_file, string const & out_prefix, int length, int step, string * out_bed_file=NULL);
+    static int split_by_seq_num(string const & in_file, string const & out_prefix, size_t n);
+    static int split_by_bp(string const & in_file, string const & out_prefix, size_t n);
+	static int split_by_file_num_eq_seq_num(string const & in_file, string const & out_prefix, size_t n);
+	static int split_by_file_num_eq_bp(string const & in_file, string const & out_prefix, size_t n);
 };
 
 class Fastq {
@@ -89,6 +110,7 @@ public:
     static int str_to_qual(string const & s, vector<int8_t> & qual);
 
     static int qual_to_str(vector<int8_t> const & qual, string & s);
+
 };
 
 /*

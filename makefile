@@ -4,21 +4,19 @@ CXXFLAGS=-I/home/chenz11/include
 CXXLIBS=-L/home/chenz11/lib -lz -lpthread 
 BAMINC=-I/home/chenz11/include
 BAMLIB=-lhts -lbam
-CPPFLAGS=-g
+CPPFLAGS=-g -fno-inline
 CPPLIBS=
 # CXXLIBS=-lpthread -lboost_system -lboost_filesystem
-obj=czl_common.o czl_bio_base.o czl_io.o czl_bam.o
-libczl_bio: ${obj}
-	g++ ${obj} ${CXXFLAGS} ${CPPFLAGS} $(BAMINC) $(CXXLIBS) -fPIC -shared -o ~/lib/libczl_bio.so
-czl_common.o: czl_common.cpp
-	g++ ${CXXFLAGS} ${CPPFLAGS} -c -fPIC czl_common.cpp
-czl_bio_base.o: czl_bio_base.cpp
-	g++ ${CXXFLAGS} ${CPPFLAGS} -c -fPIC czl_bio_base.cpp
-czl_io.o: czl_io.cpp
-	g++ ${CXXFLAGS} ${CPPFLAGS} -c -fPIC czl_io.cpp
-czl_bam.o: czl_bam.cpp
-	g++ ${CXXFLAGS} ${CPPFLAGS} -c -fPIC czl_bam.cpp
+# include seq/makefile
+obj=czl_common.o czl_bio_base.o czl_io.o czl_bam.o czl_bio_seq.o
+sub=seq
+libczl_bio: ${obj} $(sub)
+	g++ ${obj} seq/bit2_seq.o ${CXXFLAGS} ${CPPFLAGS} $(BAMINC) $(CXXLIBS) -fPIC -shared -o ~/lib/libczl_bio.so
+$(obj): %.o: %.cpp
+	g++ ${CXXFLAGS} ${CPPFLAGS} -c -fPIC $< -o $@
+seq:
+	cd seq && $(MAKE)
 
 .PHONY: clean
 clean: 
-	rm *.o
+	-rm *.o */*.o
