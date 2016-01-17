@@ -45,9 +45,15 @@ int trim_seq_by_qual(string const & qual, int begin, int length,
     if ( step_size > win_size ) step_size = win_size;
     int wn=0;
     int end = begin+length;
-    assert( end>begin );
+    if ( begin >= end ) {
+        cut_pos[0] = cut_pos[1] = 0;
+        return 0;
+    }
     if ( end>qual.size() ) end = qual.size();
-    for ( i=begin; i<end && i<win_size; i++ ) {
+
+    int b = begin, e = begin+win_size;
+    if ( e > end ) e = end;
+    for ( i=b; i < e; i++ ) {
         if ( qual[i] >= qual_thres ) {
             wn++;
         }
@@ -69,7 +75,6 @@ int trim_seq_by_qual(string const & qual, int begin, int length,
     //
 
     // trim left
-    int b = begin, e = begin+win_size;
     while ( e<end ) {
         if ( wn >= win_frac_thres*(e-b) && wn >= win_min) {
             int i0 = b;
@@ -94,39 +99,44 @@ int trim_seq_by_qual(string const & qual, int begin, int length,
         }
     }
 
-    // trim right
-    b = end-win_size;
-    e = end;
-    wn = 0;
-    for ( i=b; i<e; i++ ) {
-        if ( qual[i] >= qual_thres ) {
-            wn++;
-        }
-    }
-    while ( b>=begin ) {
-        if ( wn >= win_frac_thres*(e-b) && wn >= win_min) {
-            int i1 = e;
-			if ( qual[i1-1] < qual_thres ) {
-				while ( qual[i1-1]<qual_thres ) i1--;
-			} else {
-                while ( i1<end && qual[i1]>=qual_thres ) i1++;
-            }
-            cut_pos[1] = i1;
-            break;
-        } else {
-            for ( j=0; j<step_size && b>=begin; j++ ) {
-                if ( qual[e] >= qual_thres ) {
-                    wn--;
-                }
-                e--;
-                if ( qual[b] >= qual_thres ) {
-                    wn++;
-                }
-                b--;
+    if ( cut_pos[0] >=begin ) {
+        // trim right
+        b = end-win_size;
+        e = end;
+        wn = 0;
+        for ( i=b; i<e; i++ ) {
+            if ( qual[i] >= qual_thres ) {
+                wn++;
             }
         }
+        while ( b>=cut_pos[0] ) {
+            if ( wn >= win_frac_thres*(e-b) && wn >= win_min) {
+                int i1 = e;
+                if ( qual[i1-1] < qual_thres ) {
+                    while ( qual[i1-1]<qual_thres ) i1--;
+                } else {
+                    while ( i1<end && qual[i1]>=qual_thres ) i1++;
+                }
+                cut_pos[1] = i1;
+                break;
+            } else {
+                for ( j=0; j<step_size && b>=begin; j++ ) {
+                    if ( qual[e] >= qual_thres ) {
+                        wn--;
+                    }
+                    e--;
+                    if ( qual[b] >= qual_thres ) {
+                        wn++;
+                    }
+                    b--;
+                }
+            }
+        }
+        //
     }
-    //
+    if ( cut_pos[0]>=cut_pos[1] ) {
+        cut_pos[0] = cut_pos[1] = 0;
+    }
 
     return 0;
 }
@@ -529,21 +539,23 @@ int trim_seq_by_qual_m4(string const & qual1, int begin1, int length1,
             }
         }
     }
-    sort(v1.begin(), v1.end(), tmpb_great);
-    j = 0;
-    max_f = v1[0]->f;
-    for (i=1; i<v1.size(); i++) {
-        if ( v1[i]->f > max_f ) {
-            j++;
-            max_f = v1[i]->f;
-            if ( j!=i ) {
-                delete v1[j];
-                v1[j] = v1[i];
-                v1[i] = NULL;
-            }
-        }
-    }
-    v1.resize(j+1);
+	if ( v1.size()>1 ) {
+		sort(v1.begin(), v1.end(), tmpb_great);
+		j = 0;
+		max_f = v1[0]->f;
+		for (i=1; i<v1.size(); i++) {
+			if ( v1[i]->f > max_f ) {
+				j++;
+				max_f = v1[i]->f;
+				if ( j!=i ) {
+					delete v1[j];
+					v1[j] = v1[i];
+					v1[i] = NULL;
+				}
+			}
+		}
+		v1.resize(j+1);
+	}
     // }}}
 
     // qual2
@@ -592,21 +604,23 @@ int trim_seq_by_qual_m4(string const & qual1, int begin1, int length1,
             }
         }
     }
-    sort(v2.begin(), v2.end(), tmpb_great);
-    j = 0;
-    max_f = v2[0]->f;
-    for (i=1; i<v2.size(); i++) {
-        if ( v2[i]->f > max_f ) {
-            j++;
-            max_f = v2[i]->f;
-            if ( j!=i ) {
-                delete v2[j];
-                v2[j] = v2[i];
-                v2[i] = NULL;
-            }
-        }
-    }
-    v2.resize(j+1);
+	if ( v2.size()>1 ) {
+		sort(v2.begin(), v2.end(), tmpb_great);
+		j = 0;
+		max_f = v2[0]->f;
+		for (i=1; i<v2.size(); i++) {
+			if ( v2[i]->f > max_f ) {
+				j++;
+				max_f = v2[i]->f;
+				if ( j!=i ) {
+					delete v2[j];
+					v2[j] = v2[i];
+					v2[i] = NULL;
+				}
+			}
+		}
+		v2.resize(j+1);
+	}
     // }}}
 
     // qual1 + qual2
@@ -614,30 +628,72 @@ int trim_seq_by_qual_m4(string const & qual1, int begin1, int length1,
     max_h = 0;
     max_l = 0;
     for ( i=0; i<8; i++ ) cut_pos[i] = 0;
-    for ( i=0; i<v1.size(); i++ ) {
-        int l1 = v1[i]->e - v1[i]->b;
-        for ( j=0; j<v2.size(); j++ ) {
-            int l2 = v2[j]->e - v2[j]->b;
-            h = v1[i]->h + v2[j]->h;
-            f = (float)h / (l1+l2);
-            if ( f>frac_thres ) {
-                if ( h > max_h ) {
-                    cut_pos[2] = v1[i]->b;
-                    cut_pos[3] = v1[i]->e;
-                    cut_pos[6] = v2[j]->b;
-                    cut_pos[7] = v2[j]->e;
-                    max_h = h;
-                } 
-                if ( l1+l2 > max_l ) {
-                    cut_pos[0] = v1[i]->b;
-                    cut_pos[1] = v1[i]->e;
-                    cut_pos[4] = v2[j]->b;
-                    cut_pos[5] = v2[j]->e;
-                    max_l = l;
-                }
-            }
-        }
-    }
+	if ( v1.size()==0 ) {
+		if ( v2.size() > 0 ) {
+			for ( j=0; j<v2.size(); j++ ) {
+				int l = v2[j]->e - v2[j]->b;
+				h = v2[j]->h;
+				f = (float)h / l;
+				if ( f>frac_thres ) {
+					if ( h > max_h ) {
+						cut_pos[6] = v2[j]->b;
+						cut_pos[7] = v2[j]->e;
+						max_h = h;
+					} 
+					if ( l > max_l ) {
+						cut_pos[4] = v2[j]->b;
+						cut_pos[5] = v2[j]->e;
+						max_l = l;
+					}
+				}
+			}
+		}
+	} else {
+		if ( v2.size() == 0 ) {
+			for ( j=0; j<v1.size(); j++ ) {
+				int l = v1[j]->e - v1[j]->b;
+				h = v1[j]->h;
+				f = (float)h / l;
+				if ( f>frac_thres ) {
+					if ( h > max_h ) {
+						cut_pos[2] = v1[j]->b;
+						cut_pos[3] = v1[j]->e;
+						max_h = h;
+					} 
+					if ( l > max_l ) {
+						cut_pos[0] = v1[j]->b;
+						cut_pos[1] = v1[j]->e;
+						max_l = l;
+					}
+				}
+			}
+		} else {
+			for ( i=0; i<v1.size(); i++ ) {
+				int l1 = v1[i]->e - v1[i]->b;
+				for ( j=0; j<v2.size(); j++ ) {
+					int l2 = v2[j]->e - v2[j]->b;
+					h = v1[i]->h + v2[j]->h;
+					f = (float)h / (l1+l2);
+					if ( f>frac_thres ) {
+						if ( h > max_h ) {
+							cut_pos[2] = v1[i]->b;
+							cut_pos[3] = v1[i]->e;
+							cut_pos[6] = v2[j]->b;
+							cut_pos[7] = v2[j]->e;
+							max_h = h;
+						} 
+						if ( l1+l2 > max_l ) {
+							cut_pos[0] = v1[i]->b;
+							cut_pos[1] = v1[i]->e;
+							cut_pos[4] = v2[j]->b;
+							cut_pos[5] = v2[j]->e;
+							max_l = l;
+						}
+					}
+				}
+			}
+		}
+	}
     // }}}
 
     for ( i=0; i<v1.size(); i++ ) delete v1[i];
